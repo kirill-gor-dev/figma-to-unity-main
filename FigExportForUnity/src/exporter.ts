@@ -21,7 +21,7 @@ import type {
 
 } from './types';
 import { DEFAULT_EXPORT_OPTIONS, DEFAULT_EXPORT_SCALE } from './types';
-import { traverseNode, hasVisibleStroke } from './traverser';
+import { traverseNode, hasVisibleStroke, isIconContainer } from './traverser';
 import { mapConstraintsToAnchors, determineComponents, isInteractive } from './mapper';
 import { generateFileName, fallbackName } from './naming';
 
@@ -67,10 +67,16 @@ export async function exportDesign(
             parentMap.set(allElements[i].id, allElements[i].parentId!);
         }
         // Figma locked nodes intentionally mean merge=true in this workflow.
+        // Icon containers (pure vector/boolean_op children) are also auto-merged:
+        // they're exported as a single PNG and their sub-elements aren't needed in Unity.
         if (!mergeSet.has(allElements[i].id)) {
             var fNode = figma.getNodeById(allElements[i].id);
-            if (fNode && 'locked' in fNode && (fNode as any).locked) {
-                mergeSet.add(allElements[i].id);
+            if (fNode) {
+                var isLocked = 'locked' in fNode && (fNode as any).locked;
+                var isIcon = isIconContainer(fNode as SceneNode);
+                if (isLocked || isIcon) {
+                    mergeSet.add(allElements[i].id);
+                }
             }
         }
     }
