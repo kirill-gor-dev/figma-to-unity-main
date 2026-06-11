@@ -73,7 +73,10 @@ export async function exportDesign(
             var fNode = figma.getNodeById(allElements[i].id);
             if (fNode) {
                 var isLocked = 'locked' in fNode && (fNode as any).locked;
-                var isIcon = isIconContainer(fNode as SceneNode);
+                // Auto-layout frames are containers — never auto-merge them,
+                // their children must remain as separate Unity objects.
+                var hasAutoLayout = !!allElements[i].autoLayout;
+                var isIcon = !hasAutoLayout && isIconContainer(fNode as SceneNode);
                 if (isLocked || isIcon) {
                     mergeSet.add(allElements[i].id);
                 }

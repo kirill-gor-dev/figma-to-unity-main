@@ -151,7 +151,14 @@ export function determineComponents(element: FigmaElement): string[] {
         components.push('Image');
     }
 
-    // Auto-layout components disabled — all positioning uses fixed RectTransform offsets
+    // Auto-layout → Unity layout components
+    if (element.autoLayout) {
+        if (element.autoLayout.layoutMode === 'HORIZONTAL') {
+            components.push('HorizontalLayoutGroup');
+        } else if (element.autoLayout.layoutMode === 'VERTICAL') {
+            components.push('VerticalLayoutGroup');
+        }
+    }
 
     // Button detection: interactive elements with "button" or "btn" in name
     const nameLower = element.name.toLowerCase();
