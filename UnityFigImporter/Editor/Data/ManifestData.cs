@@ -5,6 +5,7 @@
 using System;
 using System.Collections.Generic;
 using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 
 namespace FigmaImporter.Data
 {
@@ -112,6 +113,127 @@ namespace FigmaImporter.Data
 
         [JsonProperty("clipsContent")]
         public bool ClipsContent;
+
+        [JsonProperty("tokens")]
+        public TokenBindingsData Tokens;
+    }
+
+    [Serializable]
+    public class TokenRef
+    {
+        [JsonProperty("id")]
+        public string Id;
+
+        [JsonProperty("name")]
+        public string Name;
+
+        [JsonProperty("collection")]
+        public string Collection;
+
+        /// <summary>
+        /// Resolved value from Figma.
+        /// COLOR tokens → float[4] (RGBA 0-1).
+        /// Scalar tokens (radius, opacity) → float[1].
+        /// Use IsColor to distinguish.
+        /// </summary>
+        [JsonProperty("value")]
+        [JsonConverter(typeof(TokenValueConverter))]
+        public float[] Value;
+
+        /// <summary>
+        /// Present when the paint is a gradient: "LINEAR" | "RADIAL" | "ANGULAR" | "DIAMOND".
+        /// Null for solid color tokens.
+        /// </summary>
+        [JsonProperty("gradientType")]
+        public string GradientType;
+
+        /// <summary>
+        /// Full list of gradient stops (position + color + optional token name).
+        /// Only present when GradientType is set.
+        /// </summary>
+        [JsonProperty("gradientStops")]
+        public List<GradientStopData> GradientStops;
+
+        public bool IsColor => Value != null && Value.Length == 4;
+        public bool IsGradient => !string.IsNullOrEmpty(GradientType);
+
+        public UnityEngine.Color ToColor()
+            => IsColor ? new UnityEngine.Color(Value[0], Value[1], Value[2], Value[3])
+                       : UnityEngine.Color.white;
+
+        public float ToFloat() => Value != null && Value.Length > 0 ? Value[0] : 0f;
+    }
+
+    /// <summary>
+    /// Deserializes token value which can be either a JSON number or a JSON array.
+    /// number → float[1], array → float[]
+    /// </summary>
+    public class TokenValueConverter : JsonConverter
+    {
+        public override bool CanConvert(Type objectType) => objectType == typeof(float[]);
+
+        public override object ReadJson(JsonReader reader, Type objectType,
+            object existingValue, JsonSerializer serializer)
+        {
+            var token = JToken.Load(reader);
+            if (token.Type == JTokenType.Array)
+                return token.ToObject<float[]>();
+            if (token.Type == JTokenType.Float || token.Type == JTokenType.Integer)
+                return new float[] { token.ToObject<float>() };
+            return null;
+        }
+
+        public override void WriteJson(JsonWriter writer, object value, JsonSerializer serializer)
+            => serializer.Serialize(writer, value);
+    }
+
+    [Serializable]
+    public class GradientStopData
+    {
+        /// <summary>Position along the gradient, 0–1.</summary>
+        [JsonProperty("position")]
+        public float Position;
+
+        /// <summary>Resolved RGBA color of this stop (0–1 range).</summary>
+        [JsonProperty("color")]
+        public float[] Color;
+
+        /// <summary>Name of the bound design token for this stop, if any.</summary>
+        [JsonProperty("tokenName")]
+        public string TokenName;
+
+        public UnityEngine.Color ToColor()
+            => Color != null && Color.Length >= 4
+               ? new UnityEngine.Color(Color[0], Color[1], Color[2], Color[3])
+               : UnityEngine.Color.white;
+    }
+
+    [Serializable]
+    public class TokenBindingsData
+    {
+        [JsonProperty("fill")]
+        public TokenRef Fill;
+
+        [JsonProperty("stroke")]
+        public StrokeTokenRef Stroke;
+
+        [JsonProperty("cornerRadius")]
+        public TokenRef CornerRadius;
+    }
+
+    /// <summary>
+    /// Stroke token: color + thickness.
+    /// </summary>
+    [Serializable]
+    public class StrokeTokenRef : TokenRef
+    {
+        /// <summary>Stroke thickness in Figma points.</summary>
+        [JsonProperty("weight")]
+        public float Weight;
+
+        /// <summary>Name of the bound variable for strokeWeight, e.g. "Stroke/str-2". Null if not tokenised.</summary>
+        [JsonProperty("weightTokenName")]
+        public string WeightTokenName;
     }
 
     [Serializable]
@@ -230,8 +352,25 @@ namespace FigmaImporter.Data
         [JsonProperty("opacity")]
         public float Opacity = 1f;
 
+        [JsonProperty("stroke")]
+        public StrokeStyleData Stroke;
+
         [JsonProperty("shadow")]
         public ShadowData Shadow;
+    }
+
+    [Serializable]
+    public class StrokeStyleData
+    {
+        [JsonProperty("color")]
+        public float[] Color;
+
+        [JsonProperty("weight")]
+        public float Weight;
+
+        /// <summary>"INSIDE" | "OUTSIDE" | "CENTER"</summary>
+        [JsonProperty("align")]
+        public string Align;
     }
 
     [Serializable]

@@ -61,19 +61,38 @@ export interface AutoLayoutProps {
 // Design tokens (Figma variables bound to node properties)
 // ---------------------------------------------------------------------------
 
+/** One stop inside a gradient token. */
+export interface GradientStop {
+    position: number;   // 0–1 along the gradient
+    color: RGBA;        // resolved RGBA 0-1
+    tokenName?: string; // name of the bound variable for this stop, if any
+}
+
 /** Single resolved token reference. */
 export interface TokenRef {
-    id: string;             // Figma variable ID
+    id: string;             // Figma variable ID (of the primary/first bound variable)
     name: string;           // e.g. "Brand/Primary/500" or "Radius/Card"
     collection: string;     // variable collection name
-    value: number | RGBA;   // resolved value: scalar for radius/opacity, RGBA for color
+    value: number | RGBA;   // resolved value: scalar for radius/opacity, or RGBA of first stop
+    /** Present when the paint using this token is a gradient. e.g. "LINEAR" | "RADIAL" | "ANGULAR" | "DIAMOND" */
+    gradientType?: string;
+    /** Full list of gradient stops. Present only when gradientType is set. */
+    gradientStops?: GradientStop[];
 }
 
 /** All token bindings for one element. Only present fields have bound variables. */
 export interface TokenBindings {
     fill?: TokenRef;          // fill color token
-    stroke?: TokenRef;        // stroke color token
+    stroke?: StrokeTokenRef;  // stroke color + weight
     cornerRadius?: TokenRef;  // corner radius token
+}
+
+/** Stroke token: color token + weight info. */
+export interface StrokeTokenRef extends TokenRef {
+    /** Stroke thickness in Figma points. */
+    weight: number;
+    /** Name of the bound variable for strokeWeight, if any (e.g. "Stroke/str-2"). */
+    weightTokenName?: string;
 }
 
 // ---------------------------------------------------------------------------

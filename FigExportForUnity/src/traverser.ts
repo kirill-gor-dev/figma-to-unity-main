@@ -345,29 +345,133 @@ function getTokenBindings(node: SceneNode): TokenBindings | undefined {
 
     const result: TokenBindings = {};
 
-    // Fill color token — first visible solid fill
+    // Fill color token
     const fillBindings = bv.fills;
     if (Array.isArray(fillBindings) && fillBindings.length > 0) {
-        const fillAlias = fillBindings[0]?.color ?? fillBindings[0];
-        const ref = resolveTokenRef(fillAlias);
-        if (ref) result.fill = ref;
+        const firstFill = getFirstVisiblePaint(node, 'fills');
+        const gradType = firstFill ? gradientTypeFromPaintType(firstFill.type) : null;
+
+        if (gradType && firstFill && 'gradientStops' in firstFill) {
+            // Gradient fill — collect all stops with their token bindings
+            const ref = buildGradientTokenRef(firstFill as GradientPaint, fillBindings, gradType);
+            if (ref) result.fill = ref;
+        } else {
+            // Solid fill — single color token
+            const fillAlias = fillBindings[0]?.color ?? fillBindings[0];
+            const ref = resolveTokenRef(fillAlias);
+            if (ref) result.fill = ref;
+        }
     }
 
-    // Stroke color token — first stroke
+    // Stroke color token
     const strokeBindings = bv.strokes;
     if (Array.isArray(strokeBindings) && strokeBindings.length > 0) {
-        const strokeAlias = strokeBindings[0]?.color ?? strokeBindings[0];
-        const ref = resolveTokenRef(strokeAlias);
-        if (ref) result.stroke = ref;
+        const firstStroke = getFirstVisiblePaint(node, 'strokes');
+        const gradType = firstStroke ? gradientTypeFromPaintType(firstStroke.type) : null;
+
+        let colorRef: TokenRef | null = null;
+        if (gradType && firstStroke && 'gradientStops' in firstStroke) {
+            colorRef = buildGradientTokenRef(firstStroke as GradientPaint, strokeBindings, gradType);
+        } else {
+            const strokeAlias = strokeBindings[0]?.color ?? strokeBindings[0];
+            colorRef = resolveTokenRef(strokeAlias);
+        }
+
+        if (colorRef) {
+            // Stroke weight — raw value from node
+            const rawWeight = ('strokeWeight' in node) ? (node as any).strokeWeight : 1;
+            const weight = typeof rawWeight === 'number' ? rawWeight : 1;
+
+            // Stroke weight token binding (optional)
+            let weightTokenName: string | undefined;
+            if (bv.strokeWeight?.type === 'VARIABLE_ALIAS') {
+                try {
+                    const v = figma.variables.getVariableById(bv.strokeWeight.id);
+                    if (v) weightTokenName = v.name;
+                } catch { /* ignore */ }
+            }
+
+            const strokeRef: import('./types').StrokeTokenRef = {
+                ...colorRef,
+                weight,
+                ...(weightTokenName ? { weightTokenName } : {}),
+            };
+            result.stroke = strokeRef;
+        }
     }
 
-    // Corner radius token
+    // Corner radius token — scalar value
     if (bv.cornerRadius) {
         const ref = resolveTokenRef(bv.cornerRadius);
         if (ref) result.cornerRadius = ref;
     }
 
     return Object.keys(result).length > 0 ? result : undefined;
+}
+
+/** Returns the first visible Paint from fills or strokes of a node. */
+function getFirstVisiblePaint(node: SceneNode, prop: 'fills' | 'strokes'): Paint | null {
+    if (!(prop in node)) return null;
+    const paints = (node as any)[prop];
+    if (paints === figma.mixed) return null;
+    return (paints as ReadonlyArray<Paint>).find((p) => p.visible !== false) ?? null;
+}
+
+/**
+ * Build a TokenRef for a gradient fill/stroke.
+ * Reads each gradient stop and resolves any bound variable for that stop.
+ * `stopBindings` is the array from boundVariables.fills / boundVariables.strokes:
+ *   each entry may have a `.color` VARIABLE_ALIAS for that stop.
+ */
+function buildGradientTokenRef(
+    paint: GradientPaint,
+    stopBindings: any[],
+    gradType: string
+): TokenRef | null {
+    const stops: import('./types').GradientStop[] = paint.gradientStops.map((stop, i) => {
+        const c = stop.color;
+        const color: [number, number, number, number] = [
+            Math.round(c.r * 1000) / 1000,
+            Math.round(c.g * 1000) / 1000,
+            Math.round(c.b * 1000) / 1000,
+            Math.round((c.a ?? 1) * 1000) / 1000,
+        ];
+        const binding = stopBindings[i];
+        const alias = binding?.color ?? (binding?.type === 'VARIABLE_ALIAS' ? binding : null);
+        let tokenName: string | undefined;
+        if (alias?.type === 'VARIABLE_ALIAS') {
+            try {
+                const v = figma.variables.getVariableById(alias.id);
+                if (v) tokenName = v.name;
+            } catch { /* ignore */ }
+        }
+        return tokenName ? { position: stop.position, color, tokenName } : { position: stop.position, color };
+    });
+
+    // Primary ref uses first stop that has a token, or first stop otherwise
+    const primaryStop = stops.find((s) => s.tokenName) ?? stops[0];
+    const primaryBinding = stopBindings.find((b) => (b?.color ?? b)?.type === 'VARIABLE_ALIAS');
+    const primaryRef = primaryBinding ? resolveTokenRef(primaryBinding?.color ?? primaryBinding) : null;
+
+    return {
+        id: primaryRef?.id ?? '',
+        name: primaryRef?.name ?? primaryStop?.tokenName ?? '',
+        collection: primaryRef?.collection ?? '',
+        value: primaryStop?.color ?? [0, 0, 0, 1],
+        gradientType: gradType,
+        gradientStops: stops,
+    };
+}
+
+/** Maps Figma paint type to a compact gradient identifier, or null for SOLID. */
+function gradientTypeFromPaintType(type: string): string | null {
+    switch (type) {
+        case 'GRADIENT_LINEAR':  return 'LINEAR';
+        case 'GRADIENT_RADIAL':  return 'RADIAL';
+        case 'GRADIENT_ANGULAR': return 'ANGULAR';
+        case 'GRADIENT_DIAMOND': return 'DIAMOND';
+        default: return null; // SOLID or IMAGE
+    }
 }
 
 function resolveTokenRef(alias: any): TokenRef | null {
