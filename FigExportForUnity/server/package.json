@@ -1,0 +1,51 @@
+{
+  "name": "figma-mcp-bridge",
+  "version": "0.1.1",
+  "description": "MCP server that bridges Figma plugin data to AI tools without hitting API rate limits",
+  "type": "module",
+  "bin": {
+    "figma-mcp-bridge": "dist/index.js"
+  },
+  "main": "dist/index.js",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "prepublishOnly": "bun run build"
+  },
+  "keywords": [
+    "figma",
+    "mcp",
+    "model-context-protocol",
+    "ai",
+    "design"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/zasuozz-oss/figma-to-unity.git",
+    "directory": "FigExportForUnity/server"
+  },
+  "homepage": "https://github.com/zasuozz-oss/figma-to-unity#readme",
+  "bugs": {
+    "url": "https://github.com/zasuozz-oss/figma-to-unity/issues"
+  },
+  "credits": {
+    "original": "Based on figma-mcp-bridge by gethopp",
+    "url": "https://github.com/gethopp/figma-mcp-bridge"
+  },
+  "license": "MIT",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.26.0",
+    "ws": "^8.18.0",
+    "zod": "^3.24.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "@types/ws": "^8.5.0",
+    "typescript": "^5.6.0"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  }
+}
