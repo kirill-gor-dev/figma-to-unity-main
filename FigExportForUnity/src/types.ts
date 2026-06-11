@@ -16,6 +16,9 @@ export interface FigmaElement {
     rect: Rect;
     constraints: { horizontal: string; vertical: string };
     fills: ReadonlyArray<Paint> | typeof figma.mixed;
+    strokes: ReadonlyArray<Paint> | typeof figma.mixed;
+    strokeWeight: number;
+    strokeAlign: string; // 'INSIDE' | 'OUTSIDE' | 'CENTER'
     cornerRadius: number;
     opacity: number;
     visible: boolean;
@@ -24,6 +27,7 @@ export interface FigmaElement {
     exportable: boolean; // true if has visual content worth exporting as PNG
     autoLayout?: AutoLayoutProps;
     clipsContent?: boolean;
+    tokens?: TokenBindings;  // design token bindings from Figma variables
 }
 
 /** Text properties extracted from a Figma TEXT node. */
@@ -48,6 +52,28 @@ export interface AutoLayoutProps {
     itemSpacing: number;
     primaryAxisAlignItems: string;
     counterAxisAlignItems: string;
+    /** "FIXED" | "AUTO" — AUTO means hug contents → ContentSizeFitter in Unity */
+    primaryAxisSizingMode: 'FIXED' | 'AUTO';
+    counterAxisSizingMode: 'FIXED' | 'AUTO';
+}
+
+// ---------------------------------------------------------------------------
+// Design tokens (Figma variables bound to node properties)
+// ---------------------------------------------------------------------------
+
+/** Single resolved token reference. */
+export interface TokenRef {
+    id: string;             // Figma variable ID
+    name: string;           // e.g. "Brand/Primary/500" or "Radius/Card"
+    collection: string;     // variable collection name
+    value: number | RGBA;   // resolved value: scalar for radius/opacity, RGBA for color
+}
+
+/** All token bindings for one element. Only present fields have bound variables. */
+export interface TokenBindings {
+    fill?: TokenRef;          // fill color token
+    stroke?: TokenRef;        // stroke color token
+    cornerRadius?: TokenRef;  // corner radius token
 }
 
 // ---------------------------------------------------------------------------
@@ -83,10 +109,17 @@ export interface AssetBounds {
     exportScale: number;
 }
 
+export interface StrokeStyle {
+    color: RGBA;
+    weight: number;
+    align: string; // 'INSIDE' | 'OUTSIDE' | 'CENTER'
+}
+
 export interface Style {
-    fill: RGBA;
+    fill?: RGBA;
     cornerRadius: number;
     opacity: number;
+    stroke?: StrokeStyle;
     shadow?: Shadow;
 }
 
@@ -148,7 +181,7 @@ export interface ElementData {
     autoLayout?: AutoLayoutProps;
     visible?: boolean; // omitted when true (all exported elements pass visibility filter)
     clipsContent?: boolean;
-
+    tokens?: TokenBindings; // design token bindings
 }
 
 export interface AssetEntry {

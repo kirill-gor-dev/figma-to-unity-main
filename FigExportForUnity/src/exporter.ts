@@ -11,6 +11,7 @@ import type {
     FontEntry,
     ExportedAsset,
     Style,
+    StrokeStyle,
     TextProps,
     RGBA,
     Rect,
@@ -18,7 +19,6 @@ import type {
     ExportOptions,
     ExportScale,
     ElementConfig,
-
 } from './types';
 import { DEFAULT_EXPORT_OPTIONS, DEFAULT_EXPORT_SCALE } from './types';
 import { traverseNode, hasVisibleStroke, isIconContainer } from './traverser';
@@ -292,6 +292,7 @@ export async function exportDesign(
             merged: isMerged || undefined,
             autoLayout: el.autoLayout || undefined,
             clipsContent: el.clipsContent || undefined,
+            tokens: el.tokens || undefined,
 
         });
     }
@@ -482,13 +483,39 @@ export async function exportDesign(
 
 function extractStyle(element: FigmaElement): Style | undefined {
     var fill = extractFillColor(element);
-    if (!fill && element.cornerRadius === 0 && element.opacity === 1) {
-        return undefined;
-    }
-    return {
-        fill: fill || [1, 1, 1, 1] as RGBA,
+    var stroke = extractStroke(element);
+    var hasContent = fill || stroke || element.cornerRadius !== 0 || element.opacity !== 1;
+    if (!hasContent) return undefined;
+
+    var style: Style = {
         cornerRadius: element.cornerRadius,
         opacity: element.opacity,
+    };
+    if (fill) style.fill = fill;
+    if (stroke) style.stroke = stroke;
+    return style;
+}
+
+function extractStroke(element: FigmaElement): StrokeStyle | undefined {
+    if (!element.strokes || element.strokes === figma.mixed) return undefined;
+    var strokes = element.strokes as ReadonlyArray<Paint>;
+    var solidStroke: any = null;
+    for (var i = 0; i < strokes.length; i++) {
+        if (strokes[i].type === 'SOLID' && strokes[i].visible !== false) {
+            solidStroke = strokes[i];
+            break;
+        }
+    }
+    if (!solidStroke || element.strokeWeight <= 0) return undefined;
+    return {
+        color: [
+            Math.round(solidStroke.color.r * 1000) / 1000,
+            Math.round(solidStroke.color.g * 1000) / 1000,
+            Math.round(solidStroke.color.b * 1000) / 1000,
+            solidStroke.opacity != null ? solidStroke.opacity : 1,
+        ],
+        weight: element.strokeWeight,
+        align: element.strokeAlign || 'INSIDE',
     };
 }
 

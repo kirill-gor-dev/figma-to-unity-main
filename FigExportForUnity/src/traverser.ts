@@ -3,7 +3,7 @@
 // Walks the Figma node tree and collects FigmaElement data.
 // =============================================================================
 
-import type { FigmaElement, FigmaTextProps, RGBA, AutoLayoutProps, Rect } from './types';
+import type { FigmaElement, FigmaTextProps, RGBA, AutoLayoutProps, TokenBindings, TokenRef, Rect } from './types';
 
 interface AbsoluteBounds {
     x: number;
@@ -59,12 +59,14 @@ function extractElement(node: SceneNode, parentId: string | null): FigmaElement 
     const rect = getRect(node);
     const constraints = getConstraints(node);
     const fills = getFills(node);
+    const { strokes, strokeWeight, strokeAlign } = getStrokeProps(node);
     const cornerRadius = getCornerRadius(node);
     const opacity = getOpacity(node);
     const text = getTextProps(node);
     const autoLayout = getAutoLayoutProps(node);
     const clipsContent = getClipsContent(node);
     const exportable = isExportable(node);
+    const tokens = getTokenBindings(node);
 
     return {
         id: node.id,
@@ -74,6 +76,9 @@ function extractElement(node: SceneNode, parentId: string | null): FigmaElement 
         rect,
         constraints,
         fills,
+        strokes,
+        strokeWeight,
+        strokeAlign,
         cornerRadius,
         opacity,
         visible: node.visible,
@@ -82,6 +87,7 @@ function extractElement(node: SceneNode, parentId: string | null): FigmaElement 
         exportable,
         autoLayout: autoLayout ?? undefined,
         clipsContent: clipsContent || undefined,
+        tokens: tokens ?? undefined,
     };
 }
 
@@ -147,6 +153,22 @@ function getFills(node: SceneNode): ReadonlyArray<Paint> | typeof figma.mixed {
         return (node as GeometryMixin).fills;
     }
     return [];
+}
+
+function getStrokeProps(node: SceneNode): {
+    strokes: ReadonlyArray<Paint> | typeof figma.mixed;
+    strokeWeight: number;
+    strokeAlign: string;
+} {
+    if ('strokes' in node) {
+        const g = node as GeometryMixin;
+        return {
+            strokes: g.strokes,
+            strokeWeight: typeof (g as any).strokeWeight === 'number' ? (g as any).strokeWeight : 0,
+            strokeAlign: (g as any).strokeAlign ?? 'INSIDE',
+        };
+    }
+    return { strokes: [], strokeWeight: 0, strokeAlign: 'INSIDE' };
 }
 
 function getCornerRadius(node: SceneNode): number {
@@ -306,9 +328,85 @@ function getAutoLayoutProps(node: SceneNode): AutoLayoutProps | null {
         paddingLeft: frame.paddingLeft ?? 0,
         paddingRight: frame.paddingRight ?? 0,
         itemSpacing: frame.itemSpacing ?? 0,
-        primaryAxisAlignItems: frame.primaryAxisAlignItems ?? 'MIN',
-        counterAxisAlignItems: frame.counterAxisAlignItems ?? 'MIN',
+        primaryAxisAlignItems: (frame.primaryAxisAlignItems as string) ?? 'MIN',
+        counterAxisAlignItems: (frame.counterAxisAlignItems as string) ?? 'MIN',
+        primaryAxisSizingMode: ((frame as any).primaryAxisSizingMode as 'FIXED' | 'AUTO') ?? 'FIXED',
+        counterAxisSizingMode: ((frame as any).counterAxisSizingMode as 'FIXED' | 'AUTO') ?? 'FIXED',
     };
+}
+
+// ---------------------------------------------------------------------------
+// Design token extraction (Figma Variables / boundVariables)
+// ---------------------------------------------------------------------------
+
+function getTokenBindings(node: SceneNode): TokenBindings | undefined {
+    const bv = (node as any).boundVariables;
+    if (!bv) return undefined;
+
+    const result: TokenBindings = {};
+
+    // Fill color token — first visible solid fill
+    const fillBindings = bv.fills;
+    if (Array.isArray(fillBindings) && fillBindings.length > 0) {
+        const fillAlias = fillBindings[0]?.color ?? fillBindings[0];
+        const ref = resolveTokenRef(fillAlias);
+        if (ref) result.fill = ref;
+    }
+
+    // Stroke color token — first stroke
+    const strokeBindings = bv.strokes;
+    if (Array.isArray(strokeBindings) && strokeBindings.length > 0) {
+        const strokeAlias = strokeBindings[0]?.color ?? strokeBindings[0];
+        const ref = resolveTokenRef(strokeAlias);
+        if (ref) result.stroke = ref;
+    }
+
+    // Corner radius token
+    if (bv.cornerRadius) {
+        const ref = resolveTokenRef(bv.cornerRadius);
+        if (ref) result.cornerRadius = ref;
+    }
+
+    return Object.keys(result).length > 0 ? result : undefined;
+}
+
+function resolveTokenRef(alias: any): TokenRef | null {
+    if (!alias || alias.type !== 'VARIABLE_ALIAS') return null;
+
+    try {
+        const variable = figma.variables.getVariableById(alias.id);
+        if (!variable) return null;
+
+        const collection = figma.variables.getVariableCollectionById(variable.variableCollectionId);
+        const collectionName = collection?.name ?? '';
+
+        // Get default mode value
+        const modeIds = Object.keys(variable.valuesByMode);
+        const defaultModeId = collection?.defaultModeId ?? modeIds[0];
+        const rawValue = variable.valuesByMode[defaultModeId ?? modeIds[0]];
+
+        let value: number | [number, number, number, number];
+        if (variable.resolvedType === 'COLOR' && rawValue && typeof rawValue === 'object') {
+            const c = rawValue as RGBA;
+            value = [
+                Math.round((c as any).r * 1000) / 1000,
+                Math.round((c as any).g * 1000) / 1000,
+                Math.round((c as any).b * 1000) / 1000,
+                (c as any).a ?? 1,
+            ];
+        } else {
+            value = typeof rawValue === 'number' ? rawValue : 0;
+        }
+
+        return {
+            id: alias.id,
+            name: variable.name,
+            collection: collectionName,
+            value,
+        };
+    } catch {
+        return null;
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -366,66 +464,43 @@ export function isIconContainer(node: SceneNode): boolean {
 /**
  * Determine if a node should be exported as a PNG.
  *
- * Export rules:
- * - TEXT → never export (text is rendered by TMP in Unity)
- * - GROUP → never export (only a hierarchy container), UNLESS it is an icon group
- * - VECTOR, BOOLEAN_OPERATION → always export (icons)
- * - FRAME/RECTANGLE/COMPONENT/INSTANCE → export if has visual fills/effects
+ * Rules:
+ * - TEXT                   → never (TMP in Unity)
+ * - GROUP (non-icon)       → never
+ * - VECTOR / bool ops      → always (raw shapes)
+ * - RECTANGLE              → only if image/gradient fill (solid = Image color)
+ * - FRAME / INSTANCE etc.  → only if image/gradient fill OR is an icon container
+ *                            Solid fill + corner + stroke → described by style/tokens, no PNG
  */
 function isExportable(node: SceneNode): boolean {
-    // Never export text
     if (node.type === 'TEXT') return false;
 
-    // Never export pure groups, unless it is a pure vector icon
-    if (node.type === 'GROUP') {
-        if (isIconContainer(node)) return true;
-        return false;
-    }
+    if (node.type === 'GROUP') return isIconContainer(node);
 
-    // Always export vectors/icons
     if (node.type === 'VECTOR' || node.type === 'BOOLEAN_OPERATION' || node.type === 'LINE'
         || node.type === 'ELLIPSE' || node.type === 'POLYGON' || node.type === 'STAR') return true;
 
-    // For frames that are containers (have children but no visual fills), don't export
-    if ('children' in node && (node as ChildrenMixin & SceneNode).children.length > 0) {
-        // If it's a pure vector icon component/instance, always export
-        if (isIconContainer(node)) return true;
-
-        // Container frame: export only if it has meaningful fills
-        if ('fills' in node) {
-            const fills = (node as GeometryMixin).fills;
-            if (fills !== figma.mixed) {
-                const visibleFills = (fills as ReadonlyArray<Paint>).filter(
-                    (f) => f.visible !== false
-                );
-                if (visibleFills.length === 0 && !hasVisibleStroke(node)) return false; // Pure container
-            }
-        }
-    }
-
-    // Check if it has visual content
-    if ('fills' in node) {
-        const fills = (node as GeometryMixin).fills;
-        if (fills === figma.mixed) return true;
-        const hasVisibleFill = (fills as ReadonlyArray<Paint>).some(
-            (f) => f.visible !== false && f.type !== 'IMAGE'
-        );
-        const hasImageFill = (fills as ReadonlyArray<Paint>).some(
-            (f) => f.visible !== false && f.type === 'IMAGE'
-        );
-        if (hasVisibleFill || hasImageFill) return true;
-    }
-
-    if (hasVisibleStroke(node)) return true;
-
-    // Check effects (shadows, blurs, etc.)
-    if ('effects' in node) {
-        const effects = (node as BlendMixin).effects;
-        if (effects.length > 0) return true;
-    }
-
-    return false;
+    // Both RECTANGLE and container frames: export only if image/gradient fill
+    // Solid color fills are rendered via Image.color + style data — no PNG needed
+    return hasNonSolidFill(node);
 }
+
+/** True if node has at least one visible image or gradient fill. */
+function hasNonSolidFill(node: SceneNode): boolean {
+    if (!('fills' in node)) return false;
+    const fills = (node as GeometryMixin).fills;
+    if (fills === figma.mixed) return true;
+    return (fills as ReadonlyArray<Paint>).some(
+        (f) => f.visible !== false && (
+            f.type === 'IMAGE' ||
+            f.type === 'GRADIENT_LINEAR' ||
+            f.type === 'GRADIENT_RADIAL' ||
+            f.type === 'GRADIENT_ANGULAR' ||
+            f.type === 'GRADIENT_DIAMOND'
+        )
+    );
+}
+
 
 export function hasVisibleStroke(node: SceneNode): boolean {
     if (!('strokes' in node)) return false;
