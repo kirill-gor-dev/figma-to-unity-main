@@ -415,6 +415,21 @@ namespace FigmaImporter.Data
 
         [JsonProperty("letterSpacing")]
         public float? LetterSpacing;
+
+        /// <summary>
+        /// Figma text style name, e.g. "H-XL", "P-P", "T".
+        /// Present when the text node has a bound Figma text style.
+        /// Use this to look up the matching TMP style preset in Unity.
+        /// </summary>
+        [JsonProperty("styleName")]
+        public string StyleName;
+
+        /// <summary>
+        /// Localization key when content follows dot-notation, e.g. "GroupSessions.Tab.Ongoing".
+        /// When present, Unity should use this key with the localisation system instead of content directly.
+        /// </summary>
+        [JsonProperty("localizationKey")]
+        public string LocalizationKey;
     }
 
     [Serializable]

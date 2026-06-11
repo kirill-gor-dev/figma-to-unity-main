@@ -220,6 +220,12 @@ function getTextProps(node: SceneNode): FigmaTextProps | null {
     const lineHeight = getLineHeight(textNode);
     const letterSpacing = getLetterSpacing(textNode);
 
+    // Text style name from bound Figma text style (e.g. "H-XL", "P-P")
+    const styleName = getTextStyleName(textNode);
+
+    // Localization key — content that matches dot-notation, e.g. "GroupSessions.Tab.Ongoing"
+    const localizationKey = isLocalizationKey(content) ? content : undefined;
+
     return {
         content,
         fontFamily,
@@ -229,7 +235,35 @@ function getTextProps(node: SceneNode): FigmaTextProps | null {
         alignment,
         lineHeight: lineHeight ?? undefined,
         letterSpacing: letterSpacing ?? undefined,
+        ...(styleName ? { styleName } : {}),
+        ...(localizationKey ? { localizationKey } : {}),
     };
+}
+
+/**
+ * Returns true when the string looks like a localization key:
+ *   - No whitespace or newlines
+ *   - Contains at least one dot
+ *   - Every dot-separated segment starts with an uppercase letter
+ *   e.g. "GroupSessions.Tab.Ongoing", "Common.Button.OK"
+ */
+function isLocalizationKey(text: string): boolean {
+    if (!text || /\s/.test(text)) return false;
+    const segments = text.split('.');
+    if (segments.length < 2) return false;
+    return segments.every((seg) => seg.length > 0 && /^[A-Z]/.test(seg));
+}
+
+/** Returns the Figma text style name bound to this node, e.g. "H-XL" or "P-S · 15/20". */
+function getTextStyleName(textNode: TextNode): string | null {
+    try {
+        const styleId = textNode.textStyleId;
+        if (!styleId || styleId === figma.mixed) return null;
+        const style = figma.getStyleById(styleId as string);
+        return style?.name ?? null;
+    } catch {
+        return null;
+    }
 }
 
 function resolveTextContent(textNode: TextNode): string {

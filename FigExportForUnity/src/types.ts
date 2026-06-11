@@ -158,6 +158,10 @@ export interface TextProps {
     alignment: string;
     lineHeight?: number;
     letterSpacing?: number;
+    /** Figma text style name, e.g. "H-XL", "P-P", "T". Present when node has a bound text style. */
+    styleName?: string;
+    /** Localization key when content follows dot-notation, e.g. "GroupSessions.Tab.Ongoing". */
+    localizationKey?: string;
 }
 
 // ---------------------------------------------------------------------------
