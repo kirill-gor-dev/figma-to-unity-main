@@ -353,23 +353,91 @@ function applyTextCase(content: string, textCase: TextCase): string {
     }
 }
 
+function mapAutoLayoutChildAlignment(
+    layoutMode: 'HORIZONTAL' | 'VERTICAL',
+    primaryAxis: string,
+    counterAxis: string
+): string {
+    // For HLG: primary=horizontal, counter=vertical
+    // For VLG: primary=vertical, counter=horizontal
+    // Unity TextAnchor = {vertical}{horizontal}
+    const vFromCounter: Record<string, string> = { MIN: 'Upper', CENTER: 'Middle', MAX: 'Lower' };
+    const hFromCounter: Record<string, string> = { MIN: 'Left', CENTER: 'Center', MAX: 'Right' };
+    const vFromPrimary: Record<string, string> = { MIN: 'Upper', CENTER: 'Middle', MAX: 'Lower', SPACE_BETWEEN: 'Middle' };
+    const hFromPrimary: Record<string, string> = { MIN: 'Left', CENTER: 'Center', MAX: 'Right', SPACE_BETWEEN: 'Center' };
+
+    let v: string;
+    let h: string;
+    if (layoutMode === 'HORIZONTAL') {
+        v = vFromCounter[counterAxis] ?? 'Middle';
+        h = hFromPrimary[primaryAxis] ?? 'Center';
+    } else {
+        v = vFromPrimary[primaryAxis] ?? 'Middle';
+        h = hFromCounter[counterAxis] ?? 'Center';
+    }
+    return `${v}${h}`;
+}
+
+function resolveScalarToken(bv: any, key: string): string | undefined {
+    const binding = bv?.[key];
+    if (!binding || binding.type !== 'VARIABLE_ALIAS') return undefined;
+    try {
+        const v = figma.variables.getVariableById(binding.id);
+        return v?.name ?? undefined;
+    } catch {
+        return undefined;
+    }
+}
+
 function getAutoLayoutProps(node: SceneNode): AutoLayoutProps | null {
     if (!('layoutMode' in node)) return null;
 
     const frame = node as FrameNode;
     if (frame.layoutMode === 'NONE') return null;
 
+    const layoutMode = frame.layoutMode as 'HORIZONTAL' | 'VERTICAL';
+    const primaryAxis = (frame.primaryAxisAlignItems as string) ?? 'CENTER';
+    const counterAxis = (frame.counterAxisAlignItems as string) ?? 'CENTER';
+    const childAlignment = mapAutoLayoutChildAlignment(layoutMode, primaryAxis, counterAxis);
+
+    const primarySizing = ((frame as any).primaryAxisSizingMode as string) ?? 'FIXED';
+    const counterSizing = ((frame as any).counterAxisSizingMode as string) ?? 'FIXED';
+
+    // childForceExpand: true when the container is FIXED on that axis
+    // (container has a set size → children should expand to fill it)
+    // When container hugs (AUTO) there is no extra space to fill.
+    const primaryFixed = primarySizing === 'FIXED';
+    const counterFixed = counterSizing === 'FIXED';
+
+    const childForceExpandWidth  = layoutMode === 'HORIZONTAL' ? primaryFixed : counterFixed;
+    const childForceExpandHeight = layoutMode === 'HORIZONTAL' ? counterFixed : primaryFixed;
+
+    const bv = (frame as any).boundVariables;
+    const paddingTopToken = resolveScalarToken(bv, 'paddingTop');
+    const paddingBottomToken = resolveScalarToken(bv, 'paddingBottom');
+    const paddingLeftToken = resolveScalarToken(bv, 'paddingLeft');
+    const paddingRightToken = resolveScalarToken(bv, 'paddingRight');
+    const itemSpacingToken = resolveScalarToken(bv, 'itemSpacing');
+
     return {
-        layoutMode: frame.layoutMode as 'HORIZONTAL' | 'VERTICAL',
+        layoutMode,
         paddingTop: frame.paddingTop ?? 0,
         paddingBottom: frame.paddingBottom ?? 0,
         paddingLeft: frame.paddingLeft ?? 0,
         paddingRight: frame.paddingRight ?? 0,
         itemSpacing: frame.itemSpacing ?? 0,
-        primaryAxisAlignItems: (frame.primaryAxisAlignItems as string) ?? 'MIN',
-        counterAxisAlignItems: (frame.counterAxisAlignItems as string) ?? 'MIN',
-        primaryAxisSizingMode: ((frame as any).primaryAxisSizingMode as 'FIXED' | 'AUTO') ?? 'FIXED',
-        counterAxisSizingMode: ((frame as any).counterAxisSizingMode as 'FIXED' | 'AUTO') ?? 'FIXED',
+        childAlignment,
+        childControlWidth: false,
+        childControlHeight: false,
+        childForceExpandWidth,
+        childForceExpandHeight,
+        childScaleWidth: false,
+        childScaleHeight: false,
+        ...(paddingTopToken ? { paddingTopToken } : {}),
+        ...(paddingBottomToken ? { paddingBottomToken } : {}),
+        ...(paddingLeftToken ? { paddingLeftToken } : {}),
+        ...(paddingRightToken ? { paddingRightToken } : {}),
+        ...(itemSpacingToken ? { itemSpacingToken } : {}),
     };
 }
 

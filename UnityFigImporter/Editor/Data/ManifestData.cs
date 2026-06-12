@@ -282,11 +282,41 @@ namespace FigmaImporter.Data
         [JsonProperty("itemSpacing")]
         public float ItemSpacing;
 
-        [JsonProperty("primaryAxisAlignItems")]
-        public string PrimaryAxisAlignItems;
+        [JsonProperty("childAlignment")]
+        public string ChildAlignment;
 
-        [JsonProperty("counterAxisAlignItems")]
-        public string CounterAxisAlignItems;
+        [JsonProperty("paddingTopToken")]
+        public string PaddingTopToken;
+
+        [JsonProperty("paddingBottomToken")]
+        public string PaddingBottomToken;
+
+        [JsonProperty("paddingLeftToken")]
+        public string PaddingLeftToken;
+
+        [JsonProperty("paddingRightToken")]
+        public string PaddingRightToken;
+
+        [JsonProperty("itemSpacingToken")]
+        public string ItemSpacingToken;
+
+        [JsonProperty("childControlWidth")]
+        public bool ChildControlWidth;
+
+        [JsonProperty("childControlHeight")]
+        public bool ChildControlHeight;
+
+        [JsonProperty("childForceExpandWidth")]
+        public bool ChildForceExpandWidth;
+
+        [JsonProperty("childForceExpandHeight")]
+        public bool ChildForceExpandHeight;
+
+        [JsonProperty("childScaleWidth")]
+        public bool ChildScaleWidth;
+
+        [JsonProperty("childScaleHeight")]
+        public bool ChildScaleHeight;
     }
 
     [Serializable]

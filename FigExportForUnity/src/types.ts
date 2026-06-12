@@ -47,17 +47,36 @@ export interface FigmaTextProps {
 
 /** Auto-layout properties from a Figma FRAME. */
 export interface AutoLayoutProps {
-    layoutMode: 'HORIZONTAL' | 'VERTICAL' | 'NONE';
+    layoutMode: 'HORIZONTAL' | 'VERTICAL';
     paddingTop: number;
     paddingBottom: number;
     paddingLeft: number;
     paddingRight: number;
     itemSpacing: number;
-    primaryAxisAlignItems: string;
-    counterAxisAlignItems: string;
-    /** "FIXED" | "AUTO" — AUTO means hug contents → ContentSizeFitter in Unity */
-    primaryAxisSizingMode: 'FIXED' | 'AUTO';
-    counterAxisSizingMode: 'FIXED' | 'AUTO';
+    /** Unity TextAnchor value, e.g. "MiddleCenter". Maps from Figma primary+counter axis alignment. */
+    childAlignment: string;
+    /** Token name bound to paddingTop, if any. */
+    paddingTopToken?: string;
+    /** Token name bound to paddingBottom, if any. */
+    paddingBottomToken?: string;
+    /** Token name bound to paddingLeft, if any. */
+    paddingLeftToken?: string;
+    /** Token name bound to paddingRight, if any. */
+    paddingRightToken?: string;
+    /** Token name bound to itemSpacing (gap), if any. */
+    itemSpacingToken?: string;
+    /** HLG/VLG: layout group controls child width. */
+    childControlWidth: boolean;
+    /** HLG/VLG: layout group controls child height. */
+    childControlHeight: boolean;
+    /** HLG/VLG: children are forced to expand on horizontal axis. */
+    childForceExpandWidth: boolean;
+    /** HLG/VLG: children are forced to expand on vertical axis. */
+    childForceExpandHeight: boolean;
+    /** HLG/VLG: child scale is used in layout calculations. */
+    childScaleWidth: boolean;
+    /** HLG/VLG: child scale is used in layout calculations. */
+    childScaleHeight: boolean;
 }
 
 // ---------------------------------------------------------------------------

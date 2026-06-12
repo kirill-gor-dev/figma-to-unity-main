@@ -399,9 +399,9 @@ namespace FigmaImporter
                         AddTextComponent(go, element, scaleFactor, options, fontMapping, log);
                         break;
 
-                    // Layout groups disabled — all positioning uses fixed RectTransform
                     case "HorizontalLayoutGroup":
                     case "VerticalLayoutGroup":
+                        AddLayoutGroup(go, element, scaleFactor);
                         break;
 
                     case "CanvasGroup":
@@ -782,8 +782,49 @@ namespace FigmaImporter
             return textBoxHeight >= lineHeight * 1.6f;
         }
 
-        // AddLayoutGroup removed — auto-layout components are no longer used.
-        // All child positioning is handled via fixed RectTransform offsets.
+        static void AddLayoutGroup(GameObject go, ElementData element, float scaleFactor)
+        {
+            var al = element.AutoLayout;
+            if (al == null) return;
+
+            HorizontalOrVerticalLayoutGroup lg = al.LayoutMode == "HORIZONTAL"
+                ? (HorizontalOrVerticalLayoutGroup)go.AddComponent<HorizontalLayoutGroup>()
+                : go.AddComponent<VerticalLayoutGroup>();
+
+            lg.padding = new RectOffset(
+                Mathf.RoundToInt(al.PaddingLeft * scaleFactor),
+                Mathf.RoundToInt(al.PaddingRight * scaleFactor),
+                Mathf.RoundToInt(al.PaddingTop * scaleFactor),
+                Mathf.RoundToInt(al.PaddingBottom * scaleFactor));
+
+            lg.spacing = al.ItemSpacing * scaleFactor;
+
+            lg.childAlignment = MapTextAnchor(al.ChildAlignment);
+
+            lg.childControlWidth = al.ChildControlWidth;
+            lg.childControlHeight = al.ChildControlHeight;
+            lg.childScaleWidth = al.ChildScaleWidth;
+            lg.childScaleHeight = al.ChildScaleHeight;
+            lg.childForceExpandWidth = al.ChildForceExpandWidth;
+            lg.childForceExpandHeight = al.ChildForceExpandHeight;
+        }
+
+        static TextAnchor MapTextAnchor(string alignment)
+        {
+            switch (alignment)
+            {
+                case "UpperLeft":   return TextAnchor.UpperLeft;
+                case "UpperCenter": return TextAnchor.UpperCenter;
+                case "UpperRight":  return TextAnchor.UpperRight;
+                case "MiddleLeft":  return TextAnchor.MiddleLeft;
+                case "MiddleCenter": return TextAnchor.MiddleCenter;
+                case "MiddleRight": return TextAnchor.MiddleRight;
+                case "LowerLeft":   return TextAnchor.LowerLeft;
+                case "LowerCenter": return TextAnchor.LowerCenter;
+                case "LowerRight":  return TextAnchor.LowerRight;
+                default:            return TextAnchor.UpperLeft;
+            }
+        }
 
         static void AddCanvasGroup(GameObject go, ElementData element)
         {
