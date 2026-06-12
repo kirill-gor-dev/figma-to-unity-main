@@ -37,9 +37,12 @@ export interface FigmaTextProps {
     fontStyle: string;
     fontSize: number;
     color: RGBA;
+    colorToken?: string;
     alignment: string;
     lineHeight?: number;
     letterSpacing?: number;
+    styleName?: string;
+    localizationKey?: string;
 }
 
 /** Auto-layout properties from a Figma FRAME. */
@@ -151,10 +154,11 @@ export interface Shadow {
 
 export interface TextProps {
     content: string;
-    fontFamily: string;
-    fontStyle: string;
-    fontSize: number;
-    color: RGBA;
+    fontFamily?: string;
+    fontStyle?: string;
+    fontSize?: number;
+    color?: RGBA;
+    colorToken?: string;
     alignment: string;
     lineHeight?: number;
     letterSpacing?: number;

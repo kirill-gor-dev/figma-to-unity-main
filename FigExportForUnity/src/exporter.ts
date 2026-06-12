@@ -254,16 +254,25 @@ export async function exportDesign(
 
         // Build element data
         // For TEXT exported as PNG: swap TextMeshProUGUI → Image, strip text data
-        var elementText = el.text ? {
-            content: el.text.content,
-            fontFamily: el.text.fontFamily,
-            fontStyle: el.text.fontStyle,
-            fontSize: el.text.fontSize,
-            color: el.text.color,
-            alignment: el.text.alignment,
-            lineHeight: el.text.lineHeight,
-            letterSpacing: el.text.letterSpacing,
-        } : undefined;
+        var elementText: import('./types').TextProps | undefined = el.text ? (() => {
+            const t = el.text!;
+            const base: import('./types').TextProps = {
+                content: t.content,
+                alignment: t.alignment,
+                ...(t.colorToken ? { colorToken: t.colorToken } : { color: t.color }),
+                ...(t.lineHeight !== undefined ? { lineHeight: t.lineHeight } : {}),
+                ...(t.letterSpacing !== undefined ? { letterSpacing: t.letterSpacing } : {}),
+                ...(t.localizationKey ? { localizationKey: t.localizationKey } : {}),
+            };
+            if (t.styleName) {
+                base.styleName = t.styleName;
+            } else {
+                base.fontFamily = t.fontFamily;
+                base.fontStyle = t.fontStyle;
+                base.fontSize = t.fontSize;
+            }
+            return base;
+        })() : undefined;
 
         if (isTextAsPng) {
             // Replace TMP with Image component

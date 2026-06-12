@@ -226,12 +226,16 @@ function getTextProps(node: SceneNode): FigmaTextProps | null {
     // Localization key — content that matches dot-notation, e.g. "GroupSessions.Tab.Ongoing"
     const localizationKey = isLocalizationKey(content) ? content : undefined;
 
+    // Text fill color token from bound Figma variable
+    const colorToken = getTextColorToken(textNode);
+
     return {
         content,
         fontFamily,
         fontStyle,
         fontSize,
         color,
+        ...(colorToken ? { colorToken } : {}),
         alignment,
         lineHeight: lineHeight ?? undefined,
         letterSpacing: letterSpacing ?? undefined,
@@ -667,6 +671,20 @@ function getTextProperty<T, R>(
         return extract(value as T);
     } catch {
         return fallback;
+    }
+}
+
+function getTextColorToken(textNode: TextNode): string | undefined {
+    try {
+        const bv = (textNode as any).boundVariables;
+        if (!bv) return undefined;
+        const fillBindings = bv.fills;
+        if (!Array.isArray(fillBindings) || fillBindings.length === 0) return undefined;
+        const alias = fillBindings[0]?.color ?? fillBindings[0];
+        const ref = resolveTokenRef(alias);
+        return ref?.name ?? undefined;
+    } catch {
+        return undefined;
     }
 }
 
